@@ -1,9 +1,12 @@
-CONFIG   -= flat
+QT += core
 
-INCLUDEPATH += src
+#CONFIG   -= flat
+
+INCLUDEPATH += $$PWD/src
+DEPENDPATH += $$PWD/src
 
 SOURCES  +=  \
-            src/qjsonwebtoken.cpp 
+            $$PWD/src/qjwt.cpp
 
 HEADERS  += \
-            src/qjsonwebtoken.h  
+            $$PWD/src/qjwt.h

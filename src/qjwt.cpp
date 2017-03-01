@@ -117,6 +117,16 @@ QString QJWT::signToken(void)
     header["alg"] = m_vmOptions.value("alg", "HS256").toString();
     header["typ"] = "JWT";
 
+    if ((m_vmOptions.contains("alg") && m_vmOptions.keys().length() > 1) || (!m_vmOptions.contains("alg") && m_vmOptions.keys().length() > 0)) {
+        QJsonObject pl = QJsonDocument::fromJson(m_baPayload).object();
+        QVariantMap opCopy = m_vmOptions;
+        opCopy.remove("alg");
+        foreach (QString key, opCopy.keys()) {
+            pl[key] = opCopy[key].toJsonValue();
+        }
+        m_baPayload = QJsonDocument(pl).toJson(QJsonDocument::Compact);
+    }
+
     QByteArray message;
     message += QJsonDocument(header).toJson(QJsonDocument::Compact).toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     message += ".";
