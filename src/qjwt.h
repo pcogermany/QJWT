@@ -181,26 +181,14 @@ public:
     static QJsonDocument verify(QString token, QString secret, QVariantMap options = QVariantMap()); // returns payload or {error: 'bla'}
 
     /*!
-    \brief Sets the complete JWT as a QString.
-    \param token Complete JWT as a QString.
-    \return true if the complete JWT was set, false if not set.
-
-    This method checks for a valid JWT format. It overwrites the *header*,
-    *payload* , *signature* and *algorithm*. It does **not** overwrite the secret.
-
-    \sa QJWT::token().
+    \brief Returns the payload
+    \return Payload as QJsonDocument
     */
     QJsonDocument payload();
 
     /*!
-    \brief Sets the complete JWT as a QString.
-    \param token Complete JWT as a QString.
-    \return true if the complete JWT was set, false if not set.
-
-    This method checks for a valid JWT format. It overwrites the *header*,
-    *payload* , *signature* and *algorithm*. It does **not** overwrite the secret.
-
-    \sa QJWT::token().
+    \brief Returns the last error
+    \return Last error as string
     */
     QString lastError();
 
