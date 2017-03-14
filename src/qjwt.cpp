@@ -89,13 +89,13 @@ bool QJWT::setToken(QString token)
     QStringList parts = token.split(".");
 
     if (parts.length() >= 2 && parts.length() <= 3) {
-        m_baHeader = parts[0].toUtf8();
-        m_baPayload = parts[1].toUtf8();
+        m_baHeader = QByteArray::fromBase64(parts[0].toUtf8(), QByteArray::OmitTrailingEquals | QByteArray::Base64UrlEncoding);
+        m_baPayload = QByteArray::fromBase64(parts[1].toUtf8(), QByteArray::OmitTrailingEquals | QByteArray::Base64UrlEncoding);
         m_baSignature = parts[2].toUtf8();
         return true;
     } else {
-        m_baHeader = "";
-        m_baPayload = "";
+        m_baHeader = "{}";
+        m_baPayload = "{}";
         m_baSignature = "";
     }
 
@@ -104,9 +104,7 @@ bool QJWT::setToken(QString token)
 
 bool QJWT::isValid()
 {
-    QJsonDocument temp = verifySignature(m_baHeader + "." + m_baPayload + "." + m_baSignature);
-    m_baPayload = temp.toJson(QJsonDocument::Compact);
-    return temp.isEmpty();
+    return !verifySignature(m_baHeader.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals) + "." + m_baPayload.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals) + "." + m_baSignature).isEmpty();
 }
 
 QString QJWT::signToken(void)
@@ -174,10 +172,11 @@ QJsonDocument QJWT::verify(QString token, QString secret, QVariantMap options)
 {
     QJWT jwt(token, secret, options);
 
-    if (jwt.isValid())
+    if (jwt.isValid()) {
         return jwt.payload();
-    else
+    } else {
         return QJsonDocument();
+    }
 }
 
 QJsonDocument QJWT::verifySignature(QString token)
@@ -234,7 +233,7 @@ QJsonDocument QJWT::verifySignature(QString token)
     if (!isValidToken)
         m_strLastError = "token signature invalid";
 
-    payload = QJsonDocument::fromJson(QByteArray::fromBase64(parts[1].toUtf8()));
+    payload = QJsonDocument::fromJson(QByteArray::fromBase64(parts[1].toUtf8(), QByteArray::OmitTrailingEquals | QByteArray::Base64UrlEncoding));
     QJsonObject plO = payload.object();
 
     //iss, sub, aud, exp, nbf, iat, jti
@@ -287,7 +286,7 @@ QJsonDocument QJWT::verifySignature(QString token)
 #else
         qint64 currentTime = QDateTime::currentDateTime().toTime_t() + m_vmOptions.value("clockTolerance", 0).toLongLong();
 #endif
-        isValidToken = plO["exp"].toVariant().toLongLong() >= currentTime;
+        isValidToken = QJsonValue(plO["exp"]).toVariant().toLongLong() >= currentTime;
         if (!isValidToken)
             m_strLastError = "token expired";
     }
@@ -299,7 +298,7 @@ QJsonDocument QJWT::verifySignature(QString token)
 #else
         qint64 currentTime = QDateTime::currentDateTime().toTime_t() + m_vmOptions.value("clockTolerance", 0).toLongLong();
 #endif
-        isValidToken = plO["nbf"].toVariant().toLongLong() <= currentTime;
+        isValidToken = QJsonValue(plO["nbf"]).toVariant().toLongLong() <= currentTime;
         if (!isValidToken)
             m_strLastError = "token not active anymore";
     }
@@ -307,7 +306,7 @@ QJsonDocument QJWT::verifySignature(QString token)
     // iat == unix timestamp => QDateTime  issued at
     if (isValidToken && m_vmOptions.contains("maxAge")) {
         qint64 maxAge = m_vmOptions["maxAge"].toLongLong() + m_vmOptions.value("clockTolerance", 0).toLongLong();
-        isValidToken = plO.contains("iat") && plO["iat"].toVariant().toLongLong() < maxAge;
+        isValidToken = plO.contains("iat") && QJsonValue(plO["iat"]).toVariant().toLongLong() < maxAge;
         if (!isValidToken)
             m_strLastError = "max age exceeded";
     }
@@ -635,7 +634,7 @@ QByteArray QJWT::joseToDer(QByteArray &signature, QCryptographicHash::Algorithm 
         r.remove(0, 1);
     }
     if ((quint8)r[0] >= 0x80) {
-        r.insert(0, 1, '\0');
+        r.insert(0, '\0');
     }
 
     QByteArray s = signature.right(paramBytes);
@@ -643,7 +642,7 @@ QByteArray QJWT::joseToDer(QByteArray &signature, QCryptographicHash::Algorithm 
         s.remove(0, 1);
     }
     if ((quint8)s[0] >= 0x80) {
-        s.insert(0, 1, '\0');
+        s.insert(0, '\0');
     }
 
     int seqLength = 2+r.length()+2+s.length();
@@ -685,5 +684,7 @@ QStringList QJWT::supportedAlgorithms()
 QString QJWT::sign(QJsonDocument payload, QString secret, QVariantMap options)
 {
     QJWT jwt(payload, secret, options);
+    if (!jwt.lastError().isEmpty())
+        return jwt.lastError();
     return jwt.token();
 }
