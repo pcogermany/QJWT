@@ -1,8 +1,9 @@
 #include "qjwt.h"
 
 #include <QDateTime>
-#include <QJsonArray>
 #include <QDebug>
+#include <QJsonArray>
+#include <utility>
 
 bool ssl_initialized = false;
 
@@ -14,18 +15,20 @@ QJWT::QJWT()
     init_SSL();
 }
 
-QJWT::QJWT(QString token, QString secret, QVariantMap options) {
-    m_vmOptions = options;
+QJWT::QJWT(QString token, QString secret, QVariantMap options)
+{
+    m_vmOptions = std::move(options);
     setToken(token);
     setSecret(secret);
 
     init_SSL();
 }
 
-QJWT::QJWT(QJsonDocument payload, QString secret, QVariantMap options) {
-    m_vmOptions = options;
+QJWT::QJWT(const QJsonDocument& payload, QString secret, QVariantMap options)
+{
+    m_vmOptions = std::move(options);
     setPayload(payload);
-    setSecret(secret);
+    setSecret(std::move(secret));
 
     init_SSL();
 }
@@ -40,7 +43,7 @@ QJsonDocument QJWT::payload()
     return QJsonDocument::fromJson(m_baPayload);
 }
 
-bool QJWT::setPayload(QJsonDocument payload)
+bool QJWT::setPayload(const QJsonDocument& payload)
 {
     if (payload.isEmpty() || payload.isNull() || !payload.isObject()) {
         return false;
@@ -56,7 +59,7 @@ QString QJWT::lastError()
     return m_strLastError;
 }
 
-bool QJWT::setSecret(QString secret)
+bool QJWT::setSecret(const QString& secret)
 {
     if (secret.isEmpty() || secret.isNull()) {
         return false;
@@ -67,14 +70,14 @@ bool QJWT::setSecret(QString secret)
     return true;
 }
 
-bool QJWT::setAlgorithm(QString algorithm)
+bool QJWT::setAlgorithm(const QString& algorithm)
 {
     if (!supportedAlgorithms().contains(algorithm)) {
         return false;
     }
 
     m_baAlgorithm = algorithm.toUtf8();
-    m_baHeader = "{\"typ\": \"JWT\", \"alg\" : \"" + m_baAlgorithm + "\"}";
+    m_baHeader = R"({"typ": "JWT", "alg" : ")" + m_baAlgorithm + "\"}";
 
     return true;
 }
@@ -84,7 +87,7 @@ QString QJWT::token()
     return signToken();
 }
 
-bool QJWT::setToken(QString token)
+bool QJWT::setToken(const QString& token)
 {
     QStringList parts = token.split(".");
 
@@ -93,11 +96,11 @@ bool QJWT::setToken(QString token)
         m_baPayload = QByteArray::fromBase64(parts[1].toUtf8(), QByteArray::OmitTrailingEquals | QByteArray::Base64UrlEncoding);
         m_baSignature = parts[2].toUtf8();
         return true;
-    } else {
-        m_baHeader = "{}";
-        m_baPayload = "{}";
-        m_baSignature = "";
     }
+
+    m_baHeader = "{}";
+    m_baPayload = "{}";
+    m_baSignature = "";
 
     return false;
 }
@@ -107,7 +110,7 @@ bool QJWT::isValid()
     return !verifySignature(m_baHeader.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals) + "." + m_baPayload.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals) + "." + m_baSignature).isEmpty();
 }
 
-QString QJWT::signToken(void)
+QString QJWT::signToken()
 {
     QByteArray signature;
     QString alg = m_vmOptions.value("alg", "HS256").toString().left(2);
@@ -130,7 +133,7 @@ QString QJWT::signToken(void)
     message += ".";
     message += m_baPayload.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
 
-    int bits = m_vmOptions.value("alg", "HS256").toString().right(3).toInt();
+    int bits = m_vmOptions.value("alg", "HS256").toString().rightRef(3).toInt();
     QCryptographicHash::Algorithm method;
 
     switch (bits) {
@@ -152,8 +155,7 @@ QString QJWT::signToken(void)
 #ifndef NO_OPENSSL
     else if (alg == "RS") { // RSA-SHAxxx
         signature = getAsymmetricSignature(message, m_baSecret, method);
-    }
-    else if (alg == "ES") { // ECDSA-SHAxxx
+    } else if (alg == "ES") { // ECDSA-SHAxxx
         signature = getAsymmetricSignature(message, m_baSecret, method);
         signature = derToJose(signature, method);
     }
@@ -170,19 +172,19 @@ QString QJWT::signToken(void)
 
 QJsonDocument QJWT::verify(QString token, QString secret, QVariantMap options)
 {
-    QJWT jwt(token, secret, options);
+    QJWT jwt(std::move(token), std::move(secret), std::move(options));
 
     if (jwt.isValid()) {
         return jwt.payload();
-    } else {
-        return QJsonDocument();
     }
+
+    return QJsonDocument();
 }
 
-QJsonDocument QJWT::verifySignature(QString token)
+QJsonDocument QJWT::verifySignature(const QString& token)
 {
     QStringList parts = token.split('.');
-    QByteArray message = parts[0].toUtf8()+'.'+parts[1].toUtf8();
+    QByteArray message = parts[0].toUtf8() + '.' + parts[1].toUtf8();
     QJsonObject header;
     QJsonDocument payload;
     QByteArray signature = QByteArray::fromBase64(parts[2].toUtf8(), QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
@@ -197,7 +199,7 @@ QJsonDocument QJWT::verifySignature(QString token)
 
     if (header["alg"].toString() != "none") {
         QString alg = header["alg"].toString().left(2);
-        int bits = header["alg"].toString().right(3).toInt();
+        int bits = header["alg"].toString().rightRef(3).toInt();
 
         QCryptographicHash::Algorithm method;
 
@@ -220,13 +222,11 @@ QJsonDocument QJWT::verifySignature(QString token)
 #ifndef NO_OPENSSL
         else if (alg == "RS") { // RSA-SHAxxx
             isValidToken = verifyAsymmetricSignature(message, signature, m_baSecret, method);
-        }
-        else if (alg == "ES") { // ECDSA-SHAxxx
+        } else if (alg == "ES") { // ECDSA-SHAxxx
             isValidToken = verifyAsymmetricSignature(message, joseToDer(signature, method), m_baSecret, method);
         }
 #endif
-    }
-    else {
+    } else {
         isValidToken = true;
     }
 
@@ -242,8 +242,7 @@ QJsonDocument QJWT::verifySignature(QString token)
     if (isValidToken && m_vmOptions.contains("iss")) {
         if (m_vmOptions["iss"].type() == QVariant::String) {
             isValidToken = m_vmOptions["iss"].toString() == plO["iss"].toString();
-        }
-        else if (m_vmOptions["iss"].type() == QVariant::StringList) {
+        } else if (m_vmOptions["iss"].type() == QVariant::StringList) {
             isValidToken = m_vmOptions["iss"].toStringList().contains(plO["iss"].toString());
         }
         if (!isValidToken)
@@ -322,7 +321,7 @@ QJsonDocument QJWT::verifySignature(QString token)
 }
 
 #ifndef NO_OPENSSL
-void QJWT::init_SSL(void)
+void QJWT::init_SSL()
 {
     ssl_initialized = true;
     SSL_load_error_strings();
@@ -345,7 +344,8 @@ void QJWT::init_SSL(void)
     SSL_load_error_strings();
 }
 
-bool QJWT::verifyAsymmetricSignature(const QByteArray &message, const QByteArray &signature, const QByteArray &key, QCryptographicHash::Algorithm method) {
+bool QJWT::verifyAsymmetricSignature(const QByteArray& message, const QByteArray& signature, const QByteArray& key, QCryptographicHash::Algorithm method)
+{
     EVP_MD_CTX mdctx_;
     QByteArray sign_type;
     QByteArray pubkey_prefix = "-----BEGIN PUBLIC KEY-----";
@@ -366,7 +366,6 @@ bool QJWT::verifyAsymmetricSignature(const QByteArray &message, const QByteArray
     default:
         m_strLastError = QString("%1 not implemented").arg(method);
         return false;
-        break;
     }
 
     const EVP_MD* md = EVP_get_digestbyname(sign_type.constData());
@@ -381,7 +380,7 @@ bool QJWT::verifyAsymmetricSignature(const QByteArray &message, const QByteArray
         return false;
     }
 
-    if (!EVP_VerifyUpdate(&mdctx_, message.constData(), message.length())) {
+    if (!EVP_VerifyUpdate(&mdctx_, message.constData(), static_cast<size_t>(message.length()))) {
         m_strLastError = "update error";
         return false;
     }
@@ -392,15 +391,15 @@ bool QJWT::verifyAsymmetricSignature(const QByteArray &message, const QByteArray
     bool fatal = true;
     int r = 0;
 
-    bp = BIO_new_mem_buf((char *)key.data(), key.length());
+    bp = BIO_new_mem_buf((char*)key.data(), key.length());
     if (bp == nullptr)
         goto exit;
 
-    if (qstrncmp(key.constData(), pubkey_prefix.constData(), pubkey_prefix.length()/*-1*/) == 0) {
+    if (qstrncmp(key.constData(), pubkey_prefix.constData(), pubkey_prefix.length() /*-1*/) == 0) {
         pkey = PEM_read_bio_PUBKEY(bp, nullptr, nullptr, nullptr);
         if (pkey == nullptr)
             goto exit;
-    } else if (qstrncmp(key.constData(), pubrsa_prefix.constData(), pubrsa_prefix.length()/*-1*/) == 0) {
+    } else if (qstrncmp(key.constData(), pubrsa_prefix.constData(), pubrsa_prefix.length() /*-1*/) == 0) {
         RSA* rsa = PEM_read_bio_RSAPublicKey(bp, nullptr, nullptr, nullptr);
         if (rsa) {
             pkey = EVP_PKEY_new();
@@ -422,7 +421,7 @@ bool QJWT::verifyAsymmetricSignature(const QByteArray &message, const QByteArray
     }
 
     fatal = false;
-    r = EVP_VerifyFinal(&mdctx_, reinterpret_cast<const unsigned char*>(signature.constData()), signature.length(), pkey);
+    r = EVP_VerifyFinal(&mdctx_, reinterpret_cast<const unsigned char*>(signature.constData()), static_cast<uint>(signature.length()), pkey);
 
     if (r < 0) {
         m_strLastError = ERR_error_string(ERR_get_error(), nullptr);
@@ -448,7 +447,7 @@ exit:
     return r == 1;
 }
 
-QByteArray QJWT::getAsymmetricSignature(const QByteArray &message, const QByteArray &key, QCryptographicHash::Algorithm method)
+QByteArray QJWT::getAsymmetricSignature(const QByteArray& message, const QByteArray& key, QCryptographicHash::Algorithm method)
 {
     EVP_MD_CTX mdctx_;
     QByteArray sign_type;
@@ -519,10 +518,11 @@ exit:
         return QByteArray();
     }
 
-    return QByteArray((char *)sig, sig_len);
+    return QByteArray(reinterpret_cast<char*>(sig), static_cast<int>(sig_len));
 }
 
-QByteArray QJWT::derToJose(QByteArray &signature, QCryptographicHash::Algorithm method) {
+QByteArray QJWT::derToJose(QByteArray& signature, QCryptographicHash::Algorithm method)
+{
     int paramBytes;
 
     switch (method) {
@@ -606,7 +606,8 @@ QByteArray QJWT::derToJose(QByteArray &signature, QCryptographicHash::Algorithm 
     return baJOSE;
 }
 
-QByteArray QJWT::joseToDer(QByteArray &signature, QCryptographicHash::Algorithm method) {
+QByteArray QJWT::joseToDer(QByteArray& signature, QCryptographicHash::Algorithm method)
+{
     int paramBytes;
 
     switch (method) {
@@ -645,7 +646,7 @@ QByteArray QJWT::joseToDer(QByteArray &signature, QCryptographicHash::Algorithm 
         s.insert(0, '\0');
     }
 
-    int seqLength = 2+r.length()+2+s.length();
+    int seqLength = 2 + r.length() + 2 + s.length();
 
     QByteArray baDER;
     int pos = 0;
@@ -674,16 +675,23 @@ QByteArray QJWT::joseToDer(QByteArray &signature, QCryptographicHash::Algorithm 
 QStringList QJWT::supportedAlgorithms()
 {
     QStringList algs;
-    algs << "HS256" << "HS384" << "HS512";
+    algs << "HS256"
+         << "HS384"
+         << "HS512";
 #ifndef NO_OPENSSL
-    algs << "RS256" << "RS384" << "RS512" << "ES256" << "ES384" << "ES512";
+    algs << "RS256"
+         << "RS384"
+         << "RS512"
+         << "ES256"
+         << "ES384"
+         << "ES512";
 #endif
     return algs;
 }
 
-QString QJWT::sign(QJsonDocument payload, QString secret, QVariantMap options)
+QString QJWT::sign(const QJsonDocument& payload, QString secret, QVariantMap options)
 {
-    QJWT jwt(payload, secret, options);
+    QJWT jwt(payload, std::move(secret), std::move(options));
     if (!jwt.lastError().isEmpty())
         return jwt.lastError();
     return jwt.token();

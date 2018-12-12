@@ -36,7 +36,7 @@ public:
     */
     QJWT();
     QJWT(QString token, QString secret, QVariantMap options = QVariantMap());
-    QJWT(QJsonDocument payload, QString secret, QVariantMap options = QVariantMap());
+    QJWT(const QJsonDocument& payload, QString secret, QVariantMap options = QVariantMap());
 
     /*!
     \brief Returns the JWT *header* as a QJsonDocument.
@@ -66,7 +66,7 @@ public:
 
     This method checks for a valid payload format and returns false if the payload is invalid.
     */
-    bool setPayload(QJsonDocument payload);
+    bool setPayload(const QJsonDocument& payload);
 
     /*!
     \brief Returns the JWT *secret* as a QString.
@@ -81,7 +81,7 @@ public:
 
     This method checks for a valid secret format and returns false if the secret is invalid.
     */
-    bool setSecret(QString secret);
+    bool setSecret(const QString& secret);
 
     /*!
     \brief Returns the JWT *algorithm* as a QString.
@@ -99,7 +99,7 @@ public:
 
     \sa QJWT::supportedAlgorithms().
     */
-    bool setAlgorithm(QString algorithm);
+    bool setAlgorithm(const QString& algorithm);
 
     /*!
     \brief Returns the complete JWT as a QString.
@@ -128,7 +128,7 @@ public:
 
     \sa QJWT::token().
     */
-    bool setToken(QString token);
+    bool setToken(const QString& token);
 
     /*!
     \brief Checks validity of current JWT with respect to secret.
@@ -161,7 +161,7 @@ public:
     - alg: (string) The algorithm to sign the token with, see supportedAlgorithms() or README
     - any other key: will be added as claim to the token payload
     */
-    static QString sign(QJsonDocument payload, QString secret, QVariantMap options); // returns token or empty
+    static QString sign(const QJsonDocument& payload, QString secret, QVariantMap options); // returns token or empty
 
     /*!
     \brief Verifies a token and returns the payload
@@ -202,7 +202,7 @@ private:
     QString m_strLastError;
 
 #ifndef NO_OPENSSL
-    QJsonDocument verifySignature(QString token);
+    QJsonDocument verifySignature(const QString& token);
     QString signToken(void);
     void init_SSL(void);
     QByteArray getAsymmetricSignature(const QByteArray &message, const QByteArray &key, QCryptographicHash::Algorithm method);
