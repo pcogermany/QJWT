@@ -346,7 +346,11 @@ void QJWT::init_SSL()
 
 bool QJWT::verifyAsymmetricSignature(const QByteArray& message, const QByteArray& signature, const QByteArray& key, QCryptographicHash::Algorithm method)
 {
-    EVP_MD_CTX mdctx_;
+#if OPENSSL_VERSION_NUMBER > 0x1010000fL
+    EVP_MD_CTX* mdctx_ = EVP_MD_CTX_new();
+#else
+    EVP_MD_CTX* mdctx_ = EVP_MD_CTX_create();
+#endif
     QByteArray sign_type;
     QByteArray pubkey_prefix = "-----BEGIN PUBLIC KEY-----";
     QByteArray pubrsa_prefix = "-----BEGIN RSA PUBLIC KEY-----";
@@ -374,13 +378,13 @@ bool QJWT::verifyAsymmetricSignature(const QByteArray& message, const QByteArray
         return false;
     }
 
-    EVP_MD_CTX_init(&mdctx_);
-    if (!EVP_VerifyInit_ex(&mdctx_, md, nullptr)) {
+    EVP_MD_CTX_init(mdctx_);
+    if (!EVP_VerifyInit_ex(mdctx_, md, nullptr)) {
         m_strLastError = "init error";
         return false;
     }
 
-    if (!EVP_VerifyUpdate(&mdctx_, message.constData(), static_cast<size_t>(message.length()))) {
+    if (!EVP_VerifyUpdate(mdctx_, message.constData(), static_cast<size_t>(message.length()))) {
         m_strLastError = "update error";
         return false;
     }
@@ -421,7 +425,7 @@ bool QJWT::verifyAsymmetricSignature(const QByteArray& message, const QByteArray
     }
 
     fatal = false;
-    r = EVP_VerifyFinal(&mdctx_, reinterpret_cast<const unsigned char*>(signature.constData()), static_cast<uint>(signature.length()), pkey);
+    r = EVP_VerifyFinal(mdctx_, reinterpret_cast<const unsigned char*>(signature.constData()), static_cast<uint>(signature.length()), pkey);
 
     if (r < 0) {
         m_strLastError = ERR_error_string(ERR_get_error(), nullptr);
@@ -437,7 +441,11 @@ exit:
     if (x509 != nullptr)
         X509_free(x509);
 
-    EVP_MD_CTX_cleanup(&mdctx_);
+#if OPENSSL_VERSION_NUMBER > 0x1010000fL
+    EVP_MD_CTX_free(mdctx_);
+#else
+    EVP_MD_CTX_destroy(mdctx_);
+#endif
 
     if (fatal) {
         m_strLastError = "public key error";
@@ -449,7 +457,11 @@ exit:
 
 QByteArray QJWT::getAsymmetricSignature(const QByteArray& message, const QByteArray& key, QCryptographicHash::Algorithm method)
 {
-    EVP_MD_CTX mdctx_;
+#if OPENSSL_VERSION_NUMBER > 0x1010000fL
+    EVP_MD_CTX* mdctx_ = EVP_MD_CTX_new();
+#else
+    EVP_MD_CTX* mdctx_ = EVP_MD_CTX_create();
+#endif
     QByteArray sign_type;
     unsigned int sig_len = 8192;
     unsigned char sig[sig_len];
@@ -478,13 +490,13 @@ QByteArray QJWT::getAsymmetricSignature(const QByteArray& message, const QByteAr
         return QByteArray();
     }
 
-    EVP_MD_CTX_init(&mdctx_);
-    if (!EVP_SignInit_ex(&mdctx_, md, nullptr)) {
+    EVP_MD_CTX_init(mdctx_);
+    if (!EVP_SignInit_ex(mdctx_, md, nullptr)) {
         m_strLastError = "init error";
         return QByteArray();
     }
 
-    if (!EVP_SignUpdate(&mdctx_, message.constData(), message.length())) {
+    if (!EVP_SignUpdate(mdctx_, message.constData(), message.length())) {
         m_strLastError = "update error";
         return QByteArray();
     }
@@ -502,7 +514,7 @@ QByteArray QJWT::getAsymmetricSignature(const QByteArray& message, const QByteAr
     if (pkey == nullptr || 0 != ERR_peek_error())
         goto exit;
 
-    if (EVP_SignFinal(&mdctx_, sig, &sig_len, pkey))
+    if (EVP_SignFinal(mdctx_, sig, &sig_len, pkey))
         fatal = false;
 
 exit:
@@ -511,7 +523,11 @@ exit:
     if (bp != nullptr)
         BIO_free_all(bp);
 
-    EVP_MD_CTX_cleanup(&mdctx_);
+#if OPENSSL_VERSION_NUMBER > 0x1010000fL
+    EVP_MD_CTX_free(mdctx_);
+#else
+    EVP_MD_CTX_destroy(mdctx_);
+#endif
 
     if (fatal) {
         m_strLastError = "private key error";
