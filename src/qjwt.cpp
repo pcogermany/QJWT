@@ -464,7 +464,8 @@ QByteArray QJWT::getAsymmetricSignature(const QByteArray& message, const QByteAr
 #endif
     QByteArray sign_type;
     unsigned int sig_len = 8192;
-    unsigned char sig[sig_len];
+    //unsigned char sig[sig_len];
+    unsigned char sig[8192];
 
     init_SSL();
 
